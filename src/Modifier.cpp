@@ -10,26 +10,6 @@
 
 #include <variant>
 
-ModifierType::Variant ModifierType::variantFromC(unsigned int type, int value, unsigned int duration)
-{
-    if (type <= MOD_ELEMENT_LAST)
-        return Modifier(static_cast<ModifierType::Element>(type), value, duration);
-    else if (type <= MOD_BULLET_LAST)
-        return Modifier(static_cast<ModifierType::Bullet>(type), value, duration);
-    
-    return Modifier(static_cast<ModifierType::Stat>(type), value, duration);
-}
-
-int ModifierType::value(ModifierType::Variant variant)
-{
-    return std::visit([](auto &&x) { return x.value; }, variant);
-}
-
-int ModifierType::duration(ModifierType::Variant variant)
-{
-    return std::visit([](auto &&x) { return x.duration; }, variant);
-}
-
 ModifierType::Element ModifierType::fromElement(::Element element)
 {
     switch (element)
@@ -67,8 +47,3 @@ ModifierType::Bullet ModifierType::fromBullet(::BulletType bullet)
         default: assert(!"Bullet type doesn't exist"); return BulletOfuda;
     }
 }
-
-bool ModifierType::variantComparison::operator() (const Variant &a, const Variant &b) const
-{
-    return std::visit([](auto &&a, auto &&b) { return a < b; }, a, b);
-};

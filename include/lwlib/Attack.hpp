@@ -15,7 +15,7 @@
 #include <variant>
 #include <set>
 
-#include "lwlib/internal/types.h"
+#include "lwlib/internal/macro.h"
 #include "lwlib/Modifier.hpp"
 #include "lwlib/TurnAction.hpp"
 
@@ -63,113 +63,81 @@ struct Attack
             Yin = BULLET_ATTRIBUTE_YIN,
             Yang = BULLET_ATTRIBUTE_YANG
         };
-        
-        enum Special {
+
+        enum Tag {
+            Hard,
+            Slicing,
+
+            // Special
             Piercing,
             Specular,
             Elastic,
             Precise,
-            Explosive
-        };
-        
-        enum StatusBreak {
+            Explosive,
+
+            // Status Break
             Melting = BARRIER_FREEZE,
             Toxic = BARRIER_POISON,
             Discharged = BARRIER_PARALYZE,
             Incineration = BARRIER_BURN,
-            Flash = BARRIER_BLIND
+            Flash = BARRIER_BLIND,
+        };
+
+        /**
+         * Used to attach more detail to a tag such as its slicing power,
+         * its poisoning rate, or the numbers of turns the effect will last
+         * Not all tags have these details and some tags can have only part
+         * of these details
+         */
+        struct TagInfo {
+            float value;
+            float rate;
+            float duration;
         };
         
         float power;
         float accuracy;
         float critAccuracy;
+        int bulletCount;
         YinYang bulletYinYang;
         BulletType bulletType;
         Element bulletElement;
-        unsigned int bulletCount;
-        
-        float hard;
-        float slicing;
-        
-        bool isPiercing = false;
-        bool isSpecular = false;
-        bool isElastic = false;
-        bool isPrecise = false;
-        bool isExplosive = false;
-        
-        std::set<StatusBreak> statusBreaks;
+
+        /**
+         * Bullet tags such as hard, piercing, elastic, etc.
+         * Doesn't include killers and modifiers.
+         */
+        std::map<Tag, TagInfo> tags;
+        /**
+         * Killers such as Gensokyo-Killer, Human-Killer, etc.
+         */
         std::set<CharacterTag> killers;
-        
-        template <typename... Ts, std::enable_if_t<(sizeof...(Ts) > 0)>* = nullptr>
-        Line(float power, float accuracy, float critAccuracy, YinYang bulletYinYang, BulletType bulletType, Element bulletElement, unsigned int bulletCount, float hard, float slicing, Ts... tags):
-        Line(power, accuracy, critAccuracy, bulletYinYang, bulletType, bulletElement, bulletCount, hard, slicing)
-        {
-            
-            ([&]{
-                if constexpr(std::is_same_v<decltype(tags), StatusBreak>)
-                    statusBreaks.insert(tags);
-                else if constexpr(std::is_same_v<decltype(tags), CharacterTag>)
-                    killers.insert(tags);
-                else if constexpr(std::is_same_v<decltype(tags), Special>)
-                {
-                    switch (tags) {
-                        case Piercing:
-                            isPiercing = true;
-                            break;
-                        case Specular:
-                            isSpecular = true;
-                            break;
-                        case Elastic:
-                            isElastic = true;
-                            break;
-                        case Precise:
-                            isPrecise = true;
-                        case Explosive:
-                            isExplosive = true;
-                            break;
-                        default:
-                            break;
-                    }
-                }
-            } (), ...);
+        /**
+         * Modifiers such as Yang ATK UP/DOWN, Element X UP, etc.
+         * Also contains effects such as Recover Health, Barrier Generation, ...
+         */
+        ModifierContainer modifiers;
+
+        Line(float power, float accuracy, float critAccuracy, int bulletCount, YinYang bulletYinYang,
+             BulletType bulletType, Element bulletElement, const std::map<Tag, TagInfo> &tags,
+             const std::set<CharacterTag> &killers, const ModifierContainer &modifiers);
+
+        /**
+         * Get tag info if tag exists, throws otherwise
+         * @return
+         */
+        TagInfo getTag(Tag tag) const {
+            return tags.at(tag);
         }
-        
-        Line(float power, float accuracy, float critAccuracy, YinYang bulletYinYang, BulletType bulletType, Element bulletElement, unsigned int bulletCount, float hard = 0.0, float slicing = 0.0):
-        power(power), accuracy(accuracy), critAccuracy(critAccuracy), bulletYinYang(bulletYinYang), bulletType(bulletType), bulletElement(bulletElement), bulletCount(bulletCount), hard(hard), slicing(slicing)
-        {
+
+        bool hasTag(Tag tag) const {
+            return tags.find(tag) != tags.end();
         }
-        
-        Line(attack_line c_line):
-        power(c_line.pow),
-        accuracy(c_line.hit),
-        critAccuracy(c_line.crit),
-        bulletYinYang(static_cast<YinYang>(c_line.attribute)),
-        bulletType(static_cast<BulletType>(c_line.bullet)),
-        bulletElement(static_cast<Element>(c_line.element)),
-        bulletCount(c_line.bullet_count),
-        hard(c_line.hard),
-        slicing(c_line.slicing),
-        isPiercing(c_line.piercing),
-        isSpecular(c_line.specular),
-        isElastic(c_line.elastic),
-        isPrecise(c_line.precise),
-        isExplosive(c_line.explosive)
-        {
-            for (char i = 0; i < sizeof(c_line.status_breaks)*8; ++i)
-            {
-                decltype(c_line.status_breaks) flag = 1 << i;
-                if (c_line.status_breaks & flag)
-                    statusBreaks.insert(static_cast<StatusBreak>(flag));
-            }
-            
-            for (char i = 0; i < sizeof(c_line.killers); ++i)
-            {
-                decltype(c_line.killers) flag = 1 << i;
-                if (c_line.killers & flag)
-                    killers.insert(static_cast<CharacterTag>(flag));
-            }
+
+        bool hasKiller(std::set<CharacterTag> tags) {
+            return setIntersect(killers.begin(), killers.end(), tags.begin(), tags.end());
         }
-        
+
         bool isYang() const {
             return bulletYinYang == Yang;
         }
@@ -177,55 +145,55 @@ struct Attack
         bool isYin() const {
             return bulletYinYang == Yin;
         }
+
+    private:
+        template <class I1, class I2>
+        static bool setIntersect(I1 first1, I1 last1, I2 first2, I2 last2) {
+            while (first1 != last1 && first2 != last2) {
+                if (*first1 < *first2)
+                    ++first1;
+                else if (*first2 < *first1)
+                    ++first2;
+                else
+                    return true;
+            }
+            return false;
+        }
     };
     
     std::array<Line, 6> lines;
+    /**
+     * Danmaku Level Modifier is a multiplier to a hit which is based off the level of the shot/spellcard.
+     * Spell Card level is raised by Awakening a unit, Basic Shot level rises with total Spirit Power
+     * Ranges from lv.0 to lv.5, multiplier is the same for 0 and 1?? will have to look into this
+     * Level 5 usually around 133% (to verify...)
+     * From observation (very very roughly):
+     * - spell: 100 105 115 120 125
+     * - shot:  105 110 115 120 125
+     */
     std::array<unsigned short, 5> danmakuMultiplier;
-    std::map<TurnAction::Boost, unsigned char> boostLayout;
+    /**
+     * The boost pattern of the spell (e.g. 1-1-3, 2-2-1, ...)
+     * The amount of boost needed to unleash the number of lines mapped
+     * Line 0 is always used so it's ignored, count starts at line 1
+     * e.g. for 3-1-1
+     * Boost Once -> 3 mapped -> unleash first 3 lines (ignoring line 0)
+     * Boost Twice -> 3 + 1 = 4 mapped -> unleash first 4 lines (ignoring line 0)
+     * Boost Thrice -> 3 + 1 + 1 = 5 mapped -> unleash first 5 lines (i.e. all lines)
+     * No Boost is always 1 (we only launch the first line at 0 boost power)
+     * Boost Thrice is always 6 (we always launch all 6 lines at max boost power)
+     */
+    std::map<TurnAction::Boost, int> boostLayout;
     
-    ModifierType::Container preModifiers;
-    ModifierType::Container postModifiers;
+    ModifierContainer preModifiers;
+    ModifierContainer postModifiers;
     
-    Attack(std::array<Line, 6> lines, std::array<unsigned short, 5> danmakuMultiplier, std::map<TurnAction::Boost, unsigned char> boostLayout, ModifierType::Container preModifiers = {}, ModifierType::Container postModifiers = {}):
+    Attack(const std::array<Line, 6> &lines, const std::array<unsigned short, 5> &danmakuMultiplier, const std::map<TurnAction::Boost, int> &boostLayout, const ModifierContainer &preModifiers = {}, const ModifierContainer &postModifiers = {}):
     lines(lines), danmakuMultiplier(danmakuMultiplier), boostLayout(boostLayout), preModifiers(preModifiers), postModifiers(postModifiers)
     {
         
     }
-    
-    Attack(attack c_attack):
-    lines({ c_attack.line[0], c_attack.line[1], c_attack.line[2], c_attack.line[3], c_attack.line[4], c_attack.line[5] }),
-    danmakuMultiplier({
-        static_cast<unsigned short>(c_attack.danmaku_modifier[0]),
-        static_cast<unsigned short>(c_attack.danmaku_modifier[1]),
-        static_cast<unsigned short>(c_attack.danmaku_modifier[2]),
-        static_cast<unsigned short>(c_attack.danmaku_modifier[3]),
-        static_cast<unsigned short>(c_attack.danmaku_modifier[4])
-    }),
-    boostLayout({
-        std::pair(TurnAction::noBoost, static_cast<unsigned char>(c_attack.boost_layout[0])),
-        std::pair(TurnAction::boostOnce, static_cast<unsigned char>(c_attack.boost_layout[1])),
-        std::pair(TurnAction::boostTwice, static_cast<unsigned char>(c_attack.boost_layout[2])),
-        std::pair(TurnAction::boostThrice, static_cast<unsigned char>(c_attack.boost_layout[3]))
-    })
-    {
-        char c_array_size = sizeof(c_attack.pre_modifier_type) / sizeof(c_attack.pre_modifier_type[0]);
-        for (char i = 0; i < c_array_size; ++i)
-        {
-            unsigned int type = c_attack.pre_modifier_type[i];
-            int value = c_attack.pre_modifier_value[i];
-            unsigned int duration = c_attack.pre_modifier_duration[i];
-            if (value != 0 && duration != 0)
-            {
-                preModifiers.insert(ModifierType::variantFromC(type, value, duration));
-            }
-            
-            type = c_attack.post_modifier_type[i];
-            value = c_attack.post_modifier_value[i];
-            duration = c_attack.post_modifier_duration[i];
-            if (value != 0 && duration != 0)
-                postModifiers.insert(ModifierType::variantFromC(type, value, duration));
-        }
-    }
+
 };
 
 #endif /* Attack_hpp */

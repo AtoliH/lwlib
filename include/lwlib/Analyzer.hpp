@@ -10,6 +10,9 @@
 
 #include "lwlib/Character.hpp"
 
-void analyzeTurnsConsistency(std::vector<TurnAction> actions, Character character, Character enemy);
+class Analyzer {
+public:
+    static void analyzeTurnsConsistency(std::vector<TurnAction> actions, Character character, Character enemy);
+};
 
 #endif /* Analyzer_hpp */

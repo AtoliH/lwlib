@@ -10,6 +10,7 @@
 #include <deque>
 #include <map>
 #include <numeric>
+#include <cmath>
 
 #include <iostream>
 
@@ -207,62 +208,24 @@ void analyzeTurnsConsistency(std::vector<TurnAction> actions, Character characte
 
 }
 
+/**
+ * Compute the accuracy of a bullet/line, taking the accuracy and evasion modifiers into account
+ * @param baseAccuracy
+ * @param accuracyModifier
+ * @param evasionModifier
+ * @return
+ */
+float computeAccuracy(float baseAccuracy, Modifier<ModifierType::Stat> accuracyModifier, Modifier<ModifierType::Stat> evasionModifier) {
+    int aggregatedModifier = (accuracyModifier - evasionModifier).getValue();
+    float accuracyMultiplier = std::pow(1 + 0.2f * std::abs(aggregatedModifier), (0 < aggregatedModifier) - (aggregatedModifier < 0));
+    float accuracy = std::min(1.0f, baseAccuracy * accuracyMultiplier);
+    return accuracy;
+}
+
+float computeDamage(float baseDamage) {
+
+}
+
 void analyzeTurns(std::vector<TurnAction> actions, Character character, Character enemy) {
-    std::vector<Character::LineEffectiveDamage> inaccurateDamage;
 
-    unsigned int guaranteedDamage = 0;
-
-    float randomMultiplierLow = 0.336;
-    float randomMultiplierHigh = 0.4;
-    for (auto action : actions)
-    {
-        auto skills = action.skills;
-        for (auto skill : skills)
-        {
-            // todo Analyze skill rng here...
-
-            character.useSkill(skill);
-        }
-
-        auto turnEffectiveDamage = character.attack(enemy, action.attack, action.boost, action.graze);
-        for (const auto &led : turnEffectiveDamage)
-        {
-            if (led.accuracy >= 1.0f)
-                guaranteedDamage += lineDamage(led, led.bulletCount, randomMultiplierLow);
-            else if (led.bulletDamage != 0 && led.accuracy > 0 && led.bulletCount > 0)
-                inaccurateDamage.push_back(led);
-        }
-    }
-
-    std::map<unsigned int, double> previousDamageProbability{{0, 1.0f}};
-    std::map<unsigned int, double> damageProbability;
-    unsigned int count = 0;
-    for (int i = lineCount - 1; i >= 0; --i)
-    {
-        const auto &led = innacurateDamage[i];
-
-        unsigned int singleBulletDamage = lineDamage(led, 1, randomMultiplierLow);
-
-        unsigned int bulletHit = 0;
-        for (bulletHit = 0; bulletHit <= led.bulletCount; ++bulletHit)
-        {
-            unsigned int damage = singleBulletDamage * bulletHit;
-            unsigned int subTarget = std::max<int>(0, baseSubTarget - damage);
-            for (auto it = previousDamageProbability.lower_bound(subTarget); it != previousDamageProbability.end(); ++it)
-            {
-                unsigned int subTotalDamage = damage + it->first;
-                double allLinesHitProbability = exactHitProbability(led.accuracy, led.bulletCount, bulletHit) * it->second;
-                auto lb = damageProbability.lower_bound(subTotalDamage);
-                if (lb != damageProbability.end() && !(damageProbability.key_comp()(subTotalDamage, lb->first)))
-                    lb->second += allLinesHitProbability;
-                else
-                    damageProbability.insert(lb, {subTotalDamage, allLinesHitProbability});
-                count++;
-            }
-        }
-
-        baseSubTarget += singleBulletDamage * bulletHit;
-        damageProbability.swap(previousDamageProbability);
-        damageProbability.clear();
-    }
 }
